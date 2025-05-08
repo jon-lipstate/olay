@@ -132,7 +132,7 @@ render_layout :: proc(renderer: ^sdl.Renderer, element: ^Element) {
 
 // Clean up element tree
 free_element_tree :: proc(element: ^Element) {
-	if element == nil do return
+	if element == nil {return}
 
 	// Free children first
 	if element.children != nil {
