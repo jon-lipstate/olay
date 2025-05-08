@@ -1,8 +1,6 @@
 package olay
 
-import "base:runtime"
 import "core:fmt"
-import "core:log"
 import sdl "vendor:sdl3"
 
 main :: proc() {
@@ -100,7 +98,7 @@ main :: proc() {
 		sdl.RenderPresent(renderer)
 
 		// Add a slight delay
-		sdl.Delay(2000)
+		sdl.Delay(1000)
 		// break
 	}
 

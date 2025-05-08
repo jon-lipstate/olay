@@ -1,8 +1,6 @@
 package olay
 
 import "core:fmt"
-import "core:math"
-import "core:math/bits"
 
 Element_Flag :: enum {
 	// Layout type
@@ -240,7 +238,7 @@ _close_element :: proc(e: ^Element) {
 	switch e.layout_direction {
 	case .Horizontal:
 		if has_children {
-			for child, i in e.children {
+			for child in e.children {
 				current_height = max(current_height, child.size.y)
 				current_width += child.size.x
 			}
@@ -255,7 +253,7 @@ _close_element :: proc(e: ^Element) {
 		}
 	case .Vertical:
 		if has_children {
-			for child, i in e.children {
+			for child in e.children {
 				current_width = max(current_width, child.size.x)
 				current_height += child.size.y
 			}
@@ -410,8 +408,7 @@ calculate_element_positions :: proc(element: ^Element) {
 		// Assumes: Left-To-Right
 		current_x := element.position.x + element.padding.left // Start at left padding
 
-		for child, i in element.children {
-			child := element.children[i]
+		for child in element.children {
 			child.position.x = current_x
 
 			// TODO: Alignment - Assume Top-Aligned for now
