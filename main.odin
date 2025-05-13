@@ -3,8 +3,63 @@ package olay
 import "core:fmt"
 import sdl "vendor:sdl3"
 
+import hinter "../runic/hinter"
+import shaper "../runic/shaper"
+import ttf "../runic/ttf"
+
+load_font :: proc() -> (font_id: shaper.Font_ID, engine: ^shaper.Engine) {
+	font_path := "./arial.ttf"
+	font, err := ttf.load_font(font_path, context.allocator)
+	if err != .None {
+		fmt.eprintln("Error loading font:", err)
+		return
+	}
+
+	engine = shaper.create_engine()
+	ok: bool
+	font_id, ok = shaper.register_font(engine, font)
+	if !ok {
+		fmt.eprintln("Error registering font")
+		return
+	}
+	return font_id, engine
+}
+
+shape_text :: proc(
+	engine: ^shaper.Engine,
+	font_id: shaper.Font_ID,
+	text: string,
+) -> (
+	buf: ^shaper.Shaping_Buffer,
+	ok: bool,
+) {
+	features := shaper.create_feature_set(
+		.ccmp, // Glyph composition/decomposition
+		.liga, // Standard ligatures
+		.clig, // Contextual ligatures
+		.dlig, // discretionary ligatures
+		.kern, // Kerning
+		.mark, // Mark positioning
+	)
+
+	size_px := f32(72)
+
+	buf, ok = shaper.shape_text_with_font(engine, font_id, text, .latn, .dflt, features)
+	return
+}
+
 main :: proc() {
 	fmt.println("Starting OLAY Simple Test")
+	font_id, engine := load_font()
+	defer shaper.destroy_engine(engine)
+
+	text_buf, shape_ok := shape_text(
+		engine,
+		font_id,
+		"Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.",
+	)
+	assert(shape_ok)
+	defer shaper.release_buffer(engine, text_buf)
 
 	ok := sdl.Init({.VIDEO})
 	if !ok {

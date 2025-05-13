@@ -126,17 +126,7 @@ Pointer_Capture_Mode :: enum {
 }
 
 // Element-specific data structs
-Text_Data :: struct {
-	text:           string,
-	font_id:        u16,
-	font_size:      u16,
-	letter_spacing: u16,
-	line_height:    u16,
-	text_color:     Color,
-	text_alignment: Text_Alignment,
-	wrap_mode:      Wrap_Mode,
-	measured_lines: [dynamic]Wrapped_Text_Line, // Cached measurement
-}
+
 
 Image_Data :: struct {
 	image_data:        rawptr,
