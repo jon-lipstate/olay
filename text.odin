@@ -17,6 +17,7 @@ Text_Data :: struct {
 	wrap_mode:      Wrap_Mode,
 	buffer:         ^shaper.Shaping_Buffer,
 	measured_lines: [dynamic]Wrapped_Text_Line, // Cached measurement
+	gpu_data:       Text_GPU_Data,
 }
 
 create_text_element :: proc(

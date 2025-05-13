@@ -1,11 +1,13 @@
 package olay
 
 import "core:fmt"
+import gl "vendor:OpenGL"
 import sdl "vendor:sdl3"
 
 import hinter "../runic/hinter"
 import shaper "../runic/shaper"
 import ttf "../runic/ttf"
+import la "core:math/linalg"
 
 load_font :: proc() -> (font_id: shaper.Font_ID, engine: ^shaper.Engine) {
 	font_path := "./arial.ttf"
@@ -48,18 +50,25 @@ shape_text :: proc(
 	return
 }
 
+
 main :: proc() {
 	fmt.println("Starting OLAY Simple Test")
 	font_id, engine := load_font()
 	defer shaper.destroy_engine(engine)
 
-	text_buf, shape_ok := shape_text(
-		engine,
-		font_id,
-		"Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.",
-	)
-	assert(shape_ok)
-	defer shaper.release_buffer(engine, text_buf)
+	// Load the actual font for GPU rendering
+	font_path := "./arial.ttf"
+	font, err := ttf.load_font(font_path, context.allocator)
+	if err != .None {
+		fmt.eprintln("Error loading font:", err)
+		return
+	}
+
+	// Shape "Hello" text
+	hello_text := "Hello"
+	hello_buffer, hello_ok := shape_text(engine, font_id, hello_text)
+	assert(hello_ok)
+	defer shaper.release_buffer(engine, hello_buffer)
 
 	ok := sdl.Init({.VIDEO})
 	if !ok {
@@ -68,12 +77,35 @@ main :: proc() {
 	}
 	defer sdl.Quit()
 
-	window := sdl.CreateWindow("OLAY Simple Test", 1000, 800, {.RESIZABLE, .HIGH_PIXEL_DENSITY})
+	window := sdl.CreateWindow(
+		"OLAY Simple Test",
+		1000,
+		800,
+		{.RESIZABLE, .HIGH_PIXEL_DENSITY, .OPENGL},
+	)
 	if window == nil {
 		fmt.println("Failed to create window:", sdl.GetError())
 		return
 	}
 	defer sdl.DestroyWindow(window)
+
+	// Create OpenGL context
+	gl_context := sdl.GL_CreateContext(window)
+	if gl_context == nil {
+		fmt.println("Failed to create OpenGL context:", sdl.GetError())
+		return
+	}
+	// defer sdl.GL_DeleteContext(gl_context)
+
+	// Load OpenGL functions
+	gl_proc_loader :: proc(p: rawptr, name: cstring) {
+		ptr := sdl.GL_GetProcAddress(name)
+		(^sdl.FunctionPointer)(p)^ = ptr
+	}
+	gl.load_up_to(3, 3, gl_proc_loader)
+
+	// Set vsync
+	sdl.GL_SetSwapInterval(1)
 
 	renderer := sdl.CreateRenderer(window, nil)
 	if renderer == nil {
@@ -81,6 +113,28 @@ main :: proc() {
 		return
 	}
 	defer sdl.DestroyRenderer(renderer)
+
+	// Initialize glyph cache
+	glyph_cache: Glyph_Cache
+	init_glyph_cache(&glyph_cache)
+	defer destroy_glyph_cache(&glyph_cache)
+
+	// Load and compile shaders
+	font_shader, shader_ok := compile_shader_program(font_vtx_shader, font_frag_shader)
+	if !shader_ok {
+		fmt.println("Failed to create font shader program")
+		return
+	}
+	defer gl.DeleteProgram(font_shader)
+
+	// Create text element for "Hello"
+	hello_element := create_text_element(nil, "hello_text", hello_text, font_id, engine, 32)
+	hello_element.position = {50, 400} // Position in window
+	hello_data := hello_element.data.(^Text_Data)
+	hello_data.text_color = {1.0, 1.0, 1.0, 1.0} // White text
+
+	// Process the text for GPU rendering (only need to do this once for static text)
+	prepare_text_gpu_data(hello_data, font, &glyph_cache, {50, 400})
 
 	BLUE := Color{0.0, 0.5, 0.7, 1.0}
 	PINK := Color{1.0, 0.4, 0.4, 1.0}
@@ -133,7 +187,6 @@ main :: proc() {
 		}
 		defer free_element_tree(root)
 
-
 		compute_layout(root)
 
 		// Print sizes after layout calculation
@@ -151,15 +204,62 @@ main :: proc() {
 		// 4. Render the layout
 		render_layout(renderer, root)
 
-		// Present the renderer
+		// 5. Render text using OpenGL
+		// Get window dimensions for projection matrix
+		width, height: i32
+		sdl.GetWindowSize(window, &width, &height)
+
+		// Set up OpenGL viewport
+		gl.Viewport(0, 0, width, height)
+
+		// Set up orthographic projection matrix
+		projection := orthographic_projection(0, f32(width), 0, f32(height))
+
+		// Set up matrices in shader
+		gl.UseProgram(font_shader)
+		projection_loc := gl.GetUniformLocation(font_shader, "projection")
+		model_loc := gl.GetUniformLocation(font_shader, "model")
+
+		gl.UniformMatrix4fv(projection_loc, 1, false, &projection[0][0])
+		ident := la.identity_matrix(matrix[4, 4]f32)
+		gl.UniformMatrix4fv(model_loc, 1, false, &ident[0, 0])
+
+		// Render the text
+		render_text(hello_data, font_shader, &glyph_cache)
+
+		// Reset OpenGL state
+		gl.UseProgram(0)
+
+		// Present the SDL renderer
 		sdl.RenderPresent(renderer)
 
 		// Add a slight delay
 		sdl.Delay(1000)
-		// break
 	}
 
 	fmt.println("OLAY test program ended")
+}
+
+// These helper functions will be needed
+
+// Create an orthographic projection matrix
+orthographic_projection :: proc(
+	left, right, bottom, top: f32,
+	near := -1.0,
+	far := 1.0,
+) -> matrix[4, 4]f32 {
+	mat: matrix[4, 4]f32
+
+	mat[0, 0] = 2.0 / (right - left)
+	mat[1, 1] = 2.0 / (top - bottom)
+	mat[2, 2] = -2.0 / f32(far - near)
+
+	mat[3, 0] = -(right + left) / (right - left)
+	mat[3, 1] = -(top + bottom) / (top - bottom)
+	mat[3, 2] = -f32(far + near) / f32(far - near)
+	mat[3, 3] = 1.0
+
+	return mat
 }
 
 render_layout :: proc(renderer: ^sdl.Renderer, element: ^Element) {
