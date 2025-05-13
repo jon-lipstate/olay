@@ -53,31 +53,33 @@ main :: proc() {
 		sdl.RenderClear(renderer)
 
 		// Create scope to pop the elements
-		root, pink, yellow: ^Element
 		defer i += 1
+		root, pink, yellow: ^Element
 		{
 			root = push_element(nil, "Blue")
 			root.background_color = BLUE
 			root.flags = {.Flow_Horizontal, .Has_Border}
-			root.sizing_type = {.Fixed, .Fit}
+			root.constraints.x.mode = .Fixed
+			root.constraints.y.mode = .Fit
 			root.size = {760, 96}
 			root.padding = {16, 16, 16, 16}
 			root.child_gap = 24
 
 			pink = push_element(root, "pink")
 			pink.background_color = PINK
-			pink.sizing_type = {.Fixed, .Fixed}
+			pink.constraints.x.mode = .Fixed
+			pink.constraints.y.mode = .Fixed
 			pink.size = {max(f32(pink_width - i * 20), 25), 300}
 
 			yellow = push_element(root, "yellow")
 			yellow.background_color = YELLOW
-			yellow.sizing_type = {.Grow, .Grow}
-			yellow.size = {0, 0}
+			yellow.constraints.x.mode = .Grow
+			yellow.constraints.y.mode = .Grow
 		}
 		defer free_element_tree(root)
 
 
-		calculate_final_layout(root)
+		compute_layout(root)
 
 		// Print sizes after layout calculation
 		fmt.println("Sizes after layout calculation:")
@@ -106,7 +108,6 @@ main :: proc() {
 }
 
 render_layout :: proc(renderer: ^sdl.Renderer, element: ^Element) {
-
 	// Draw this element
 	rect := sdl.FRect{element.position.x, element.position.y, element.size.x, element.size.y}
 	color := element.background_color
